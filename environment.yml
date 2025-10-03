@@ -1,17 +1,16 @@
 name: exx-sr
 channels:
   - defaults
-  - conda-forge
 dependencies:
-  - python=3.12
+  - python=3.11
   - matplotlib
-  - pandas
   - pydantic
-  - pyyaml
   - scipy
-  - tqdm
   - ipykernel
   - h5py
+  - pip
+  - sympy
   - pip:
       - torch==2.8.0
       - torchvision==0.23.0
+      - symantic==1.1.0.6
