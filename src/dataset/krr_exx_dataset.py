@@ -68,8 +68,8 @@ class KRRExxDataset(BaseDataset):
             )
             for d in [
                 f"X_system_{type}_subsample",
-                f"y_system_{type}_subsample",
                 f"ex_system_{type}_subsample",
+                f"y_system_{type}_subsample",
             ]
         ]
         return (
@@ -78,23 +78,13 @@ class KRRExxDataset(BaseDataset):
             exx_files,
         )
 
-    def _get_data_from_file_paths(self, file_paths: list[str]):
-        shape = [0, 0]
-        for file_path in file_paths:
-            with open(file_path, "rb") as file:
-                data = pickle.load(file)
-                shape[0] += data.shape[0]
-                shape[1] = data.shape[1]
-        res = np.zeros(shape)
-        curr = 0
-        for file_path in file_paths:
-            with open(file_path, "rb") as file:
-                data = pickle.load(file)
-                res[curr : curr + data.shape[0], :] = data
-                curr += data.shape[0]
-        return res
+    def _get_data_from_file_path(self, file_path: str):
+        data = []
+        with open(file_path, "rb") as file:
+            data = pickle.load(file)
+        return np.array(data)
 
-    def _get_data(
+    def _get_subsampled_data(
         self, type: Literal["training", "validation"], sample_size=-1, shuffle=False
     ):
         x_files = []
@@ -113,26 +103,46 @@ class KRRExxDataset(BaseDataset):
             sys.exit(
                 f"File number mismatch - X: {len(x_files)}, y: {len(exLDA_files)}, exx: {len(exx_files)}"
             )
-        exx_data = self._get_data_from_file_paths(exx_files)
-        exLDA_data = self._get_data_from_file_paths(exLDA_files)
-        x_data = self._get_data_from_file_paths(x_files)
-        s = self.get_s(x_data[:, 0], x_data[:, 1])
-        # todo: figure out why s <= 10 needs to be removed
-        indices = [i for i in range(len(x_data)) if s[i] <= 10.0]
-        if sample_size > 0:
-            if shuffle:
-                np.random.shuffle(indices)
-            indices = indices[:sample_size]
-            exx_data = exx_data[indices]
-            exLDA_data = exLDA_data[indices]
+
+        # Figure out how many points to sample per file and the shape of the output
+        points_per_file = int(np.ceil(sample_size / len(x_files)))
+        x_list = []
+        exLDA_list = []
+        exx_list = []
+        for x_file, exLDA_file, exx_file in zip(x_files, exLDA_files, exx_files):
+
+            # subsample valid points
+            x = self._get_data_from_file_path(x_file)
+            s = self.get_s(x[:, 0], x[:, 1])
+            indices = [i for i in range(len(x)) if s[i] <= 10]
+            np.random.shuffle(indices)
+            indices = indices[:points_per_file]
+
+            x_list.append(x[indices])
+            exLDA_list.append(self._get_data_from_file_path(exLDA_file)[indices])
+            exx_list.append(self._get_data_from_file_path(exx_file)[indices])
+
+        x_data = np.vstack(x_list)[:sample_size]
+        exLDA_data = np.vstack(exLDA_list)[:sample_size]
+        exx_data = np.vstack(exx_list)[:sample_size]
+
+        # randomly shuffle indices again if desired
+        if shuffle:
+            indices = [i for i in range(len(x_data))]
+            np.random.shuffle(indices)
             x_data = x_data[indices]
+            exLDA_data = exLDA_data[indices]
+            exx_data = exx_data[indices]
+
         return x_data, exLDA_data, exx_data
 
     def get_data_train(self, sample_size=-1, shuffle=False):
-        x_data, exLDA_data, exx_data = self._get_data("training", sample_size, shuffle)
+        x_data, exLDA_data, exx_data = self._get_subsampled_data("training", sample_size, shuffle)
         dens = x_data[:, 0].reshape(-1, 1)
         sq_grad_dens = x_data[:, 1].reshape(-1, 1)
-        fxx = exx_data / (dens * exLDA_data)
+
+        # todo: figure out the 0.25 factor
+        fxx = exx_data / (0.25 * dens * exLDA_data)
         fx_chachiyo = self.get_fx_chachiyo(self.get_x(dens, sq_grad_dens))
         fx_ratio = fxx / fx_chachiyo
 
