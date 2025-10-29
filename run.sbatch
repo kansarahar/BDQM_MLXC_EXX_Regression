@@ -14,4 +14,4 @@ source ~/.bashrc
 module load anaconda3/2023.03
 conda activate exx-sr
 
-python /home/hice1/hkansara3/scratch/EXX_regression/src/main.py > results.txt
+python /home/hice1/hkansara3/scratch/EXX_regression/src/main.py > "${SLURM_JOBID}_results.txt"
