@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.preprocessing import MaxAbsScaler
 from dataset.rydberg_dataset import RydbergDataset
-from dataset.krr_exx_dataset import KRRExxDataset
+from dataset.exx_dataset import ExxDataset
 from regressor.symantic_regressor import SyMANTICRegressor
 from regressor.krr_regressor import KRRRegressor
 
@@ -10,19 +10,20 @@ from regressor.krr_regressor import KRRRegressor
 # regressor = SyMANTICRegressor(
 #     operators=["pow(2)", "^-1", "-", "/", "+"], metrics=[1e-8, 1.0]
 # )
-dataset = KRRExxDataset(system_type="molecules")
-regressor = SyMANTICRegressor(
-    scaler=MaxAbsScaler(),
-    operators=["+", "-", "*", "/", "exp", "sin", "cos"],
-    metrics=[1e-8, 1.0],
-)
+dataset = ExxDataset(system_type="molecules")
+# regressor = SyMANTICRegressor(
+#     scaler=MaxAbsScaler(),
+#     operators=["+", "-", "*", "/", "exp", "sin", "cos"],
+#     metrics=[1e-8, 1.0],
+# )
+regressor = KRRRegressor()
 
 np.random.seed(1)
 
 print("loading training data")
-X_train, y_train = dataset.get_data_train(sample_size=30, shuffle=True)
+X_train, y_train = dataset.get_data_train(sample_size=3000, shuffle=True)
 print("loading testing data")
-X_test, y_test = dataset.get_data_test(sample_size=30, shuffle=True)
+X_test, y_test = dataset.get_data_test(sample_size=3000, shuffle=True)
 print("fitting model")
 regressor.fit(X_train, y_train)
 print("completed fitting")

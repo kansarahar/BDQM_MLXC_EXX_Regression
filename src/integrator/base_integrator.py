@@ -18,11 +18,6 @@ class BaseIntegrator(ABC):
     def __init__(self) -> None:
         pass
 
-    # @abstractmethod
-    # def get_energy_density(self, subsystem: str, gridpoint_idx: int) -> float:
-    #     pass
-
     @abstractmethod
-    def get_total_energy(self, subsystem: str) -> float:
+    def get_total_energy(self, system: str) -> float:
         pass
-
