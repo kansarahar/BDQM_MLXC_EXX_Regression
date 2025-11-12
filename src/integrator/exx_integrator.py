@@ -42,7 +42,7 @@ class ExxIntegrator(BaseIntegrator):
                     .strip()
                 )
                 continue
-        if not volume > 0:
+        if volume <= 0:
             sys.exit(f"Volume could not be parsed from file {file_path}")
         return volume
 
