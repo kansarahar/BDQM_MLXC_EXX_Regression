@@ -14,11 +14,10 @@ class ExxIntegrator(BaseIntegrator):
         self,
         system_type: Literal["bulks", "molecules", "cubic_bulks"],
         descriptor_data_dir_path: str = "/storage/ice-shared/vip-vvi/descriptor_data/",
-        exact_exchange_dir_path: str = "/storage/ice-shared/vip-vvi/exact_exchange_work/test_2_dir/subsampling/subsampled_folder/",
+        exact_exchange_dir_path: str = "/storage/ice-shared/vip-vvi/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex/",
     ) -> None:
         super().__init__()
         self.dataset = ExxDataset(exact_exchange_dir_path, system_type)
-        self.model = model
         self.system_type = system_type
         self.descriptor_data_dir_path = descriptor_data_dir_path
         self.exact_exchange_dir_path = exact_exchange_dir_path
