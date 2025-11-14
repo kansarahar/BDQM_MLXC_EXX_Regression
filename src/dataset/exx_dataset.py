@@ -36,32 +36,36 @@ class ExxDataset(BaseDataset):
 
     def _get_system_num_gridpoints(
         self,
-        descriptor_data_dir_path: str,
+        exact_exchange_dir_path: str,
         system_type: Literal["bulks", "molecules", "cubic_bulks"],
         system: str,
     ) -> float:
-        if system_type == "molecules":
-            system_type = "molecules_data"
-        file_path = os.path.join(
-            descriptor_data_dir_path, system_type, system, "sprc-calc.out"
-        )
-        num_points = -1
-        with open(file_path, "r") as file:
-            lines = file.readlines()
-        for line in lines:
-            if line.startswith("FD_GRID"):
-                fd_grid = line.strip().removeprefix("FD_GRID: ").strip().split(" ")
-                fd_grid = [float(item.strip()) for item in fd_grid]
-                if len(fd_grid) != 3:
-                    sys.exit(f"Invalid FD_GRID size: {fd_grid}")
-                num_points = 1
-                for i in fd_grid:
-                    num_points *= i
-                continue
-        if not num_points > 0:
-            sys.exit(f"The number of points could not be parsed from file {file_path}")
+        return len(self.get_exchange_energy_density(system))
+        # NOTE: This code at the bottom seems to give only half of the correct value.
+        #   This may affect dV so it is worth investigating why (maybe due to spin density vs density?)
+        #
+        # if system_type == "molecules":
+        #     system_type = "molecules_data"
+        # file_path = os.path.join(
+        #     exact_exchange_dir_path, system_type, system, "sprc-calc.out"
+        # )
+        # num_points = -1
+        # with open(file_path, "r") as file:
+        #     lines = file.readlines()
+        # for line in lines:
+        #     if line.startswith("FD_GRID"):
+        #         fd_grid = line.strip().removeprefix("FD_GRID: ").strip().split(" ")
+        #         fd_grid = [float(item.strip()) for item in fd_grid]
+        #         if len(fd_grid) != 3:
+        #             sys.exit(f"Invalid FD_GRID size: {fd_grid}")
+        #         num_points = 1
+        #         for i in fd_grid:
+        #             num_points *= i
+        #         continue
+        # if not num_points > 0:
+        #     sys.exit(f"The number of points could not be parsed from file {file_path}")
 
-        return num_points
+        # return num_points
 
     def _get_s(self, dens, sigma):
         grad_rho = np.sqrt(sigma)
@@ -198,38 +202,41 @@ class ExxDataset(BaseDataset):
         return available_systems
 
     def get_atoms_in_system(self, system) -> dict[str, int]:
-        atom_counts = {}
-        system_type = self.system_type_from_system[system]
-        if system_type == "molecules":
-            system_type = "molecules_data"
-        file_path = os.path.join(
-            self.descriptor_data_dir_path, system_type, system, "sprc-calc.static"
-        )
-        key_str = "Fractional coordinates of "
-        num_lines = 0
-        with open(file_path, "r") as file:
-            num_lines = len(file.readlines())
-        with open(file_path, "r") as file:
-            line = file.readline()
-            for i in range(
-                num_lines
-            ):  # using num_lines rather than while(True) to avoid infinite loops just in case
-                if not line or line.startswith("Total free energy"):
-                    break
-                elif line.startswith(key_str):
-                    symbol = line.removeprefix(key_str).removesuffix(":\n")
-                    atom_counts[symbol] = 0
-                    for i in range(num_lines):
+        try:
+            atom_counts = {}
+            system_type = self.system_type_from_system[system]
+            if system_type == "molecules":
+                system_type = "molecules_data"
+            file_path = os.path.join(
+                self.descriptor_data_dir_path, system_type, system, "sprc-calc.static"
+            )
+            key_str = "Fractional coordinates of "
+            num_lines = 0
+            with open(file_path, "r") as file:
+                num_lines = len(file.readlines())
+            with open(file_path, "r") as file:
+                line = file.readline()
+                for i in range(
+                    num_lines
+                ):  # using num_lines rather than while(True) to avoid infinite loops just in case
+                    if not line or line.startswith("Total free energy"):
+                        break
+                    elif line.startswith(key_str):
+                        symbol = line.removeprefix(key_str).removesuffix(":\n")
+                        atom_counts[symbol] = 0
+                        for i in range(num_lines):
+                            line = file.readline()
+                            if (
+                                not line
+                                or line.startswith("Total free energy")
+                                or line.startswith(key_str)
+                            ):
+                                break
+                            atom_counts[symbol] += 1
+                    else:
                         line = file.readline()
-                        if (
-                            not line
-                            or line.startswith("Total free energy")
-                            or line.startswith(key_str)
-                        ):
-                            break
-                        atom_counts[symbol] += 1
-                else:
-                    line = file.readline()
+        except:
+            sys.exit(f"System {system} does not exist")
         return atom_counts
 
     def get_dV(self, system: str) -> np.ndarray:
