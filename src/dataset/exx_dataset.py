@@ -7,7 +7,7 @@ from dataset.base_dataset import BaseDataset
 
 
 class ExxDataset(BaseDataset):
-    def _get_subsystem_volume(
+    def _get_system_volume(
         self,
         descriptor_data_dir_path: str,
         system_type: Literal["bulks", "molecules", "cubic_bulks"],
@@ -34,7 +34,7 @@ class ExxDataset(BaseDataset):
             sys.exit(f"Volume could not be parsed from file {file_path}")
         return volume
 
-    def _get_subsystem_num_gridpoints(
+    def _get_system_num_gridpoints(
         self,
         descriptor_data_dir_path: str,
         system_type: Literal["bulks", "molecules", "cubic_bulks"],
@@ -198,14 +198,46 @@ class ExxDataset(BaseDataset):
         return available_systems
 
     def get_atoms_in_system(self, system) -> dict[str, int]:
-        return {}
+        atom_counts = {}
+        system_type = self.system_type_from_system[system]
+        if system_type == "molecules":
+            system_type = "molecules_data"
+        file_path = os.path.join(
+            self.descriptor_data_dir_path, system_type, system, "sprc-calc.static"
+        )
+        key_str = "Fractional coordinates of "
+        num_lines = 0
+        with open(file_path, "r") as file:
+            num_lines = len(file.readlines())
+        with open(file_path, "r") as file:
+            line = file.readline()
+            for i in range(
+                num_lines
+            ):  # using num_lines rather than while(True) to avoid infinite loops just in case
+                if not line or line.startswith("Total free energy"):
+                    break
+                elif line.startswith(key_str):
+                    symbol = line.removeprefix(key_str).removesuffix(":\n")
+                    atom_counts[symbol] = 0
+                    for i in range(num_lines):
+                        line = file.readline()
+                        if (
+                            not line
+                            or line.startswith("Total free energy")
+                            or line.startswith(key_str)
+                        ):
+                            break
+                        atom_counts[symbol] += 1
+                else:
+                    line = file.readline()
+        return atom_counts
 
     def get_dV(self, system: str) -> np.ndarray:
         system_type = self.system_type_from_system[system]
-        volume = self._get_subsystem_volume(
+        volume = self._get_system_volume(
             self.descriptor_data_dir_path, system_type, system
         )
-        num_points = self._get_subsystem_num_gridpoints(
+        num_points = self._get_system_num_gridpoints(
             self.descriptor_data_dir_path, system_type, system
         )
         return (volume / num_points) * np.ones((int(num_points), 1))

@@ -59,8 +59,8 @@ class BaseDataset(ABC):
     @abstractmethod
     def get_exchange_energy_density(self, system: str) -> np.ndarray:
         """
-        Get the exchange energy density (exx) associated with each point in the system.
-        The returned value should have shape (N, 1), where:
+        Get the exchange energy density (exx) associated with each point in the
+        system (in Hartrees). The returned value should have shape (N, 1), where:
         - N is the number of points in the system
         """
 
