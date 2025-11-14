@@ -104,7 +104,7 @@ class ExxDataset(BaseDataset):
             data_type = f"{data_type}_subsample"
         x_file_path, exLDA_file_path, exx_file_path = [
             os.path.join(
-                self.file_path,
+                self.exact_exchange_dir_path,
                 system_type,
                 f"{d}_system_{data_type}",
                 f"{system}.pkl",
@@ -121,7 +121,7 @@ class ExxDataset(BaseDataset):
         with open(file_path, "rb") as file:
             data = pickle.load(file)
         return np.array(data)
-    
+
     def _get_data_for_system(
         self,
         data_type: Literal["training", "validation", "all"],
@@ -134,10 +134,10 @@ class ExxDataset(BaseDataset):
         Given a data_type and a valid system, get the x, exLDA, and exx data for that system.
         If num_points < 0, all points will be considered for sampling. If num_points > 0, only points with s <= 10 are considered.
         """
-        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_paths(
             data_type, system_type, system
         )
-        x = self._get_data_from_file_path(x_file_path)
+        x = self._get_numpy_data_from_file_path(x_file_path)
         s = self._get_s(x[:, 0], x[:, 1])
         indices = (
             [i for i in range(len(x)) if s[i] <= 10]  # subsample valid points
@@ -149,8 +149,8 @@ class ExxDataset(BaseDataset):
         indices = indices[:num_points]
 
         x_data = x[indices]
-        exLDA_data = self._get_data_from_file_path(exLDA_file_path)[indices]
-        exx_data = self._get_data_from_file_path(exx_file_path)[indices]
+        exLDA_data = self._get_numpy_data_from_file_path(exLDA_file_path)[indices]
+        exx_data = self._get_numpy_data_from_file_path(exx_file_path)[indices]
         return x_data, exLDA_data, exx_data
 
     def __init__(
@@ -170,7 +170,7 @@ class ExxDataset(BaseDataset):
         # create a list of systems for each system type
         self.systems = {}
         for st in self.system_types:
-            exchange_data_file_names = (
+            exchange_data_file_names = list(
                 filter(
                     lambda s: s.endswith(".pkl"),
                     os.listdir(
@@ -197,6 +197,9 @@ class ExxDataset(BaseDataset):
             available_systems += self.systems[system_type]
         return available_systems
 
+    def get_atoms_in_system(self, system) -> dict[str, int]:
+        return {}
+
     def get_dV(self, system: str) -> np.ndarray:
         system_type = self.system_type_from_system[system]
         volume = self._get_subsystem_volume(
@@ -205,11 +208,11 @@ class ExxDataset(BaseDataset):
         num_points = self._get_subsystem_num_gridpoints(
             self.descriptor_data_dir_path, system_type, system
         )
-        return (volume / num_points) * np.ones((num_points, 1))
+        return (volume / num_points) * np.ones((int(num_points), 1))
 
     def get_descriptors(self, system) -> np.ndarray:
         system_type = self.system_type_from_system[system]
-        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_paths(
             "all", system_type, system
         )
         x_data = self._get_numpy_data_from_file_path(x_file_path)
@@ -226,12 +229,11 @@ class ExxDataset(BaseDataset):
 
     def get_exchange_energy_density(self, system) -> np.ndarray:
         system_type = self.system_type_from_system[system]
-        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_paths(
             "all", system_type, system
         )
         exx_data = self._get_numpy_data_from_file_path(exx_file_path)
         return exx_data
-
 
     def _get_subsampled_data(
         self,
@@ -271,10 +273,10 @@ class ExxDataset(BaseDataset):
                 index += 1
 
         return x_data, exLDA_data, exx_data
-    
+
     def convert_labels_to_exchange_energy_density(self, system, y):
         system_type = self.system_type_from_system[system]
-        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_paths(
             "all", system_type, system
         )
         x_data = self._get_numpy_data_from_file_path(x_file_path)
@@ -282,11 +284,11 @@ class ExxDataset(BaseDataset):
         dens = x_data[:, 0].reshape(-1, 1)
         sq_grad_dens = x_data[:, 1].reshape(-1, 1)
 
-        if (len(exLDA_data) != len(y)):
+        if len(exLDA_data) != len(y):
             sys.exit("Size mismatch: y is not the correct size")
 
         fx_chachiyo = self._get_fx_chachiyo(self._get_x(dens, sq_grad_dens))
-        fxx = y / fx_chachiyo
+        fxx = y * fx_chachiyo
         exx_data = fxx * (0.25 * dens * exLDA_data)
 
         return exx_data
@@ -299,8 +301,8 @@ class ExxDataset(BaseDataset):
         sq_grad_dens = x_data[:, 1].reshape(-1, 1)
 
         # todo: figure out the 0.25 factor
-        fxx = exx_data / (0.25 * dens * exLDA_data)
         fx_chachiyo = self._get_fx_chachiyo(self._get_x(dens, sq_grad_dens))
+        fxx = exx_data / (0.25 * dens * exLDA_data)
         fx_ratio = fxx / fx_chachiyo
 
         # todo: figure out the meaning of this whole section of logic
