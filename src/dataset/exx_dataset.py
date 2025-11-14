@@ -7,32 +7,61 @@ from dataset.base_dataset import BaseDataset
 
 
 class ExxDataset(BaseDataset):
-    def __init__(
+    def _get_subsystem_volume(
         self,
-        file_path: str = "/storage/ice-shared/vip-vvi/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
-        system_type: Literal["bulks", "cubic_bulks", "molecules", "all"] = "all",
-    ):
-        self.file_path = file_path
-        self.system_types = (
-            [system_type]
-            if system_type != "all"
-            else ["bulks", "cubic_bulks", "molecules"]
+        descriptor_data_dir_path: str,
+        system_type: Literal["bulks", "molecules", "cubic_bulks"],
+        system: str,
+    ) -> float:
+        if system_type == "molecules":
+            system_type = "molecules_data"
+        file_path = os.path.join(
+            descriptor_data_dir_path, system_type, system, "sprc-calc.out"
         )
-        self.systems = {
-            st: list(
-                map(
-                    lambda s: s.replace(".pkl", ""),
-                    filter(
-                        lambda s: s.endswith(".pkl"),
-                        os.listdir(
-                            os.path.join(file_path, st, "ex_system_training_subsample")
-                        ),
-                    ),
+        volume = -1
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if line.startswith("Volume"):
+                volume = float(
+                    line.strip()
+                    .removeprefix("Volume: ")
+                    .removesuffix(" (Bohr^3)")
+                    .strip()
                 )
-            )
-            for st in ["bulks", "cubic_bulks", "molecules"]
-        }
-        self.num_systems = sum([len(self.systems[st]) for st in self.system_types])
+                continue
+        if volume <= 0:
+            sys.exit(f"Volume could not be parsed from file {file_path}")
+        return volume
+
+    def _get_subsystem_num_gridpoints(
+        self,
+        descriptor_data_dir_path: str,
+        system_type: Literal["bulks", "molecules", "cubic_bulks"],
+        system: str,
+    ) -> float:
+        if system_type == "molecules":
+            system_type = "molecules_data"
+        file_path = os.path.join(
+            descriptor_data_dir_path, system_type, system, "sprc-calc.out"
+        )
+        num_points = -1
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+        for line in lines:
+            if line.startswith("FD_GRID"):
+                fd_grid = line.strip().removeprefix("FD_GRID: ").strip().split(" ")
+                fd_grid = [float(item.strip()) for item in fd_grid]
+                if len(fd_grid) != 3:
+                    sys.exit(f"Invalid FD_GRID size: {fd_grid}")
+                num_points = 1
+                for i in fd_grid:
+                    num_points *= i
+                continue
+        if not num_points > 0:
+            sys.exit(f"The number of points could not be parsed from file {file_path}")
+
+        return num_points
 
     def _get_s(self, dens, sigma):
         grad_rho = np.sqrt(sigma)
@@ -56,7 +85,7 @@ class ExxDataset(BaseDataset):
         fx_chachiyo = fx_num / fx_denom
         return fx_chachiyo
 
-    def _get_file_path(
+    def _get_file_paths(
         self,
         data_type: Literal["training", "validation", "all"],
         system_type: Literal["bulks", "cubic_bulks", "molecules"],
@@ -84,7 +113,7 @@ class ExxDataset(BaseDataset):
         ]
         return x_file_path, exLDA_file_path, exx_file_path
 
-    def _get_data_from_file_path(self, file_path: str) -> np.ndarray:
+    def _get_numpy_data_from_file_path(self, file_path: str) -> np.ndarray:
         """
         Load a given file path as a numpy array
         """
@@ -92,8 +121,8 @@ class ExxDataset(BaseDataset):
         with open(file_path, "rb") as file:
             data = pickle.load(file)
         return np.array(data)
-
-    def get_data_for_system(
+    
+    def _get_data_for_system(
         self,
         data_type: Literal["training", "validation", "all"],
         system_type: Literal["bulks", "cubic_bulks", "molecules"],
@@ -124,21 +153,100 @@ class ExxDataset(BaseDataset):
         exx_data = self._get_data_from_file_path(exx_file_path)[indices]
         return x_data, exLDA_data, exx_data
 
+    def __init__(
+        self,
+        descriptor_data_dir_path: str = "/storage/ice-shared/vip-vvi/descriptor_data/",
+        exact_exchange_dir_path: str = "/storage/ice-shared/vip-vvi/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
+        system_type: Literal["bulks", "cubic_bulks", "molecules"] | None = None,
+    ):
+        self.descriptor_data_dir_path = descriptor_data_dir_path
+        self.exact_exchange_dir_path = exact_exchange_dir_path
+        self.system_types = (
+            [system_type]
+            if system_type != None
+            else ["bulks", "cubic_bulks", "molecules"]
+        )
+
+        # create a list of systems for each system type
+        self.systems = {}
+        for st in self.system_types:
+            exchange_data_file_names = (
+                filter(
+                    lambda s: s.endswith(".pkl"),
+                    os.listdir(
+                        os.path.join(
+                            self.exact_exchange_dir_path,
+                            st,
+                            "ex_system_training_subsample",
+                        )
+                    ),
+                ),
+            )
+            system_names = [s.replace(".pkl", "") for s in exchange_data_file_names]
+            self.systems[st] = system_names
+
+        # the inverse of self.systems - create a map from system to its corresponding system type
+        self.system_type_from_system = {}
+        for st in self.system_types:
+            for system in self.systems[st]:
+                self.system_type_from_system[system] = st
+
+    def get_available_systems(self) -> list[str]:
+        available_systems = []
+        for system_type in self.system_types:
+            available_systems += self.systems[system_type]
+        return available_systems
+
+    def get_dV(self, system: str) -> np.ndarray:
+        system_type = self.system_type_from_system[system]
+        volume = self._get_subsystem_volume(
+            self.descriptor_data_dir_path, system_type, system
+        )
+        num_points = self._get_subsystem_num_gridpoints(
+            self.descriptor_data_dir_path, system_type, system
+        )
+        return (volume / num_points) * np.ones((num_points, 1))
+
+    def get_descriptors(self, system) -> np.ndarray:
+        system_type = self.system_type_from_system[system]
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+            "all", system_type, system
+        )
+        x_data = self._get_numpy_data_from_file_path(x_file_path)
+
+        # todo: figure out the meaning of this whole section of logic
+        rcut = np.arange(0.5, 3.5, 0.5)
+        mcsh_order = np.arange(0, 3, 1)
+        index = 2
+        for order in mcsh_order:
+            for rc in rcut:
+                x_data[:, index] = x_data[:, index] * (rc**3)
+                index += 1
+        return x_data
+
+    def get_exchange_energy_density(self, system) -> np.ndarray:
+        system_type = self.system_type_from_system[system]
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+            "all", system_type, system
+        )
+        exx_data = self._get_numpy_data_from_file_path(exx_file_path)
+        return exx_data
+
+
     def _get_subsampled_data(
         self,
         data_type: Literal["training", "validation", "all"],
         sample_size=-1,
         shuffle=False,
     ):
-
         # Figure out how many points to sample per file and the shape of the output
-        points_per_file = int(np.ceil(sample_size / self.num_systems))
+        points_per_file = int(np.ceil(sample_size / len(self.get_available_systems())))
         x_list = []
         exLDA_list = []
         exx_list = []
         for system_type in self.system_types:
             for system in self.systems[system_type]:
-                x_data, exLDA_data, exx_data = self.get_data_for_system(
+                x_data, exLDA_data, exx_data = self._get_data_for_system(
                     data_type,
                     system_type,
                     system,
@@ -153,7 +261,35 @@ class ExxDataset(BaseDataset):
         exLDA_data = np.vstack(exLDA_list)[:sample_size]
         exx_data = np.vstack(exx_list)[:sample_size]
 
+        # todo: figure out the meaning of this whole section of logic
+        rcut = np.arange(0.5, 3.5, 0.5)
+        mcsh_order = np.arange(0, 3, 1)
+        index = 2
+        for order in mcsh_order:
+            for rc in rcut:
+                x_data[:, index] = x_data[:, index] * (rc**3)
+                index += 1
+
         return x_data, exLDA_data, exx_data
+    
+    def convert_labels_to_exchange_energy_density(self, system, y):
+        system_type = self.system_type_from_system[system]
+        x_file_path, exLDA_file_path, exx_file_path = self._get_file_path(
+            "all", system_type, system
+        )
+        x_data = self._get_numpy_data_from_file_path(x_file_path)
+        exLDA_data = self._get_numpy_data_from_file_path(exLDA_file_path)
+        dens = x_data[:, 0].reshape(-1, 1)
+        sq_grad_dens = x_data[:, 1].reshape(-1, 1)
+
+        if (len(exLDA_data) != len(y)):
+            sys.exit("Size mismatch: y is not the correct size")
+
+        fx_chachiyo = self._get_fx_chachiyo(self._get_x(dens, sq_grad_dens))
+        fxx = y / fx_chachiyo
+        exx_data = fxx * (0.25 * dens * exLDA_data)
+
+        return exx_data
 
     def get_data_train(self, sample_size=-1, shuffle=False):
         x_data, exLDA_data, exx_data = self._get_subsampled_data(
