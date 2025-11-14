@@ -65,7 +65,9 @@ class BaseDataset(ABC):
         """
 
     @abstractmethod
-    def convert_labels_to_exchange_energy_density(system: str, y: np.ndarray) -> np.ndarray:
+    def convert_labels_to_exchange_energy_density(
+        system: str, y: np.ndarray
+    ) -> np.ndarray:
         """
         For every point in the given system, convert the train/test labels y into
         exx. If the labels are already equal to exx, simply return y.
