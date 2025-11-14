@@ -3,10 +3,12 @@ import os
 import pickle
 import sys
 from typing import Literal
+
 from dataset.base_dataset import BaseDataset
 
 
 class ExxDataset(BaseDataset):
+
     def _get_system_volume(
         self,
         descriptor_data_dir_path: str,
@@ -163,6 +165,15 @@ class ExxDataset(BaseDataset):
         exact_exchange_dir_path: str = "/storage/ice-shared/vip-vvi/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
         system_type: Literal["bulks", "cubic_bulks", "molecules"] | None = None,
     ):
+        """
+        Args:
+            descriptor_data_dir_path (str): the path to the descriptor_data directory used to generate descriptors for each system with SPARC
+            exact_exchange_dir_path (str): the path to the subsampled_folder_ex directory used to create the training / validation data
+            system_type: ('bulks' | 'cubic_bulks' | 'molecules' | None): useful if you want to train a model on only a specific system_type, otherwise leave as None
+
+        Check out base_dataset.py for more information regarding the functions listed here.
+        """
+
         self.descriptor_data_dir_path = descriptor_data_dir_path
         self.exact_exchange_dir_path = exact_exchange_dir_path
         self.system_types = (
@@ -343,15 +354,6 @@ class ExxDataset(BaseDataset):
         fx_chachiyo = self._get_fx_chachiyo(self._get_x(dens, sq_grad_dens))
         fxx = exx_data / (0.25 * dens * exLDA_data)
         fx_ratio = fxx / fx_chachiyo
-
-        # todo: figure out the meaning of this whole section of logic
-        rcut = np.arange(0.5, 3.5, 0.5)
-        mcsh_order = np.arange(0, 3, 1)
-        index = 2
-        for order in mcsh_order:
-            for rc in rcut:
-                x_data[:, index] = x_data[:, index] * (rc**3)
-                index += 1
 
         return x_data, fx_ratio
 

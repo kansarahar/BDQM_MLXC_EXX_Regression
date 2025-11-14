@@ -1,6 +1,8 @@
 import numpy as np
 from sympy import symbols, Eq, solve, collect, expand, linear_eq_to_matrix
 import sys
+from fractions import Fraction
+
 from dataset.base_dataset import BaseDataset
 from regressor.base_regressor import BaseRegressor
 
@@ -23,6 +25,10 @@ class ExxPipeline:
         return self.dataset.get_available_systems()
 
     def get_true_total_exchange_energy(self, system: str) -> float:
+        """
+        Returns:
+            exchange energy (Hartrees)
+        """
         exx = self.dataset.get_exchange_energy_density(system)
         dV = self.dataset.get_dV(system)
         return float(np.sum(exx * dV))
@@ -150,21 +156,38 @@ class ExxPipeline:
         reactant_coeffs = coeffs[: len(reactants)]
         product_coeffs = coeffs[len(reactants) :]
 
-        # print reaction details
+        # the rest of this is just printing reaction details
+        print("------- Reaction Details -------")
+        print("Atoms:")
         for i, reactant in enumerate(reactants):
-            print(f"{reactant}:", reactant_atoms[i])
+            print(f"    {reactant}:", reactant_atoms[i])
         for i, product in enumerate(products):
-            print(f"{product}:", product_atoms[i])
+            print(f"    {product}:", product_atoms[i])
+
+        def get_reactant_string(system: str, coeff: float):
+            frac_coeff = Fraction(coeff).limit_denominator(10000).as_integer_ratio()
+            value = ""
+            if frac_coeff[1] > 10:
+                value = str(coeff)
+            elif frac_coeff[1] == 1:
+                value = str(frac_coeff[0])
+            else:
+                value = "/".join([str(frac_coeff[0]), str(frac_coeff[1])])
+            return "{" + value + "}" + "(" + system + ")"
+
         reactant_strings = [
-            f"{reactant_coeffs[i]}({reactants[i]})" for i in range(len(reactants))
+            get_reactant_string(system, coeff)
+            for (system, coeff) in zip(reactants, reactant_coeffs)
         ]
         product_strings = [
-            f"{product_coeffs[i]}({products[i]})" for i in range(len(products))
+            get_reactant_string(system, coeff)
+            for (system, coeff) in zip(products, product_coeffs)
         ]
         reaction_string = (
             f"{' + '.join(reactant_strings)} => {' + '.join(product_strings)}"
         )
         print("RXN:", reaction_string)
+        print("--------------------------------")
 
         return reactant_coeffs, product_coeffs
 
