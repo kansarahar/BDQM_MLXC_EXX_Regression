@@ -13,6 +13,7 @@ dependencies:
   - scikit-learn
   - tqdm
   - pip:
+      - ase==3.26.0
       - torch==2.8.0
       - torchvision==0.23.0
       - symantic==1.1.0.6
