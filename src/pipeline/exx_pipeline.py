@@ -2,6 +2,7 @@ import numpy as np
 from sympy import symbols, Eq, solve, collect, expand, linear_eq_to_matrix
 import sys
 from fractions import Fraction
+from ase.data import chemical_symbols
 
 from dataset.base_dataset import BaseDataset
 from regressor.base_regressor import BaseRegressor
@@ -17,6 +18,22 @@ class ExxPipeline:
     ) -> None:
         self.dataset = dataset
         self.regressor = regressor
+        self.systems = list(sorted(self.dataset.get_available_systems()))
+
+        # create the coefficient matrix from the dataset
+        print("building coefficient matrix")
+        self.coefficient_matrix = np.zeros((len(self.systems), len(chemical_symbols)))
+        for system_idx, system in enumerate(self.systems):
+            atoms = self.dataset.get_atoms_in_system(system)
+            symbols = atoms.keys()
+            if set(symbols).issubset(chemical_symbols):
+                for symbol, count in atoms.items():
+                    symbol_idx = chemical_symbols.index(symbol)
+                    self.coefficient_matrix[system_idx, symbol_idx] = count
+            else:
+                print(f"Invalid chemical symbol ({symbol}) in system {system}")
+                continue
+        print("finished building coefficient matrix")
 
     def set_regressor(self, regressor: BaseRegressor) -> None:
         self.regressor = regressor
@@ -24,7 +41,7 @@ class ExxPipeline:
     def get_available_systems(self) -> list[str]:
         return self.dataset.get_available_systems()
 
-    def get_true_total_exchange_energy(self, system: str) -> float:
+    def get_true_exchange_energy(self, system: str) -> float:
         """
         Returns:
             exchange energy (Hartrees)
@@ -32,6 +49,19 @@ class ExxPipeline:
         exx = self.dataset.get_exchange_energy_density(system)
         dV = self.dataset.get_dV(system)
         return float(np.sum(exx * dV))
+
+    def get_true_ls_formation_exchange_energies(self) -> dict[str, float]:
+        """
+        Returns:
+            A dict containing the least squares exchange energies of formation (in Hartrees) for each system
+        """
+        Exx = np.array(
+            [self.get_true_exchange_energy(system) for system in self.systems]
+        )
+        N = self.coefficient_matrix
+        least_squares_elemental_potentials = np.linalg.pinv(N.T @ N) @ N.T @ Exx
+        delta_Exx = Exx - N @ least_squares_elemental_potentials
+        return {self.systems[i]: delta_Exx[i] for i in range(len(self.systems))}
 
     def train_regressor(
         self, sample_size=-1, shuffle_data=True, model_name: str | None = None
@@ -55,7 +85,7 @@ class ExxPipeline:
         print(f"Training MSE: {np.mean((train_pred - y_train)**2)}")
         print(f"Testing MSE: {np.mean((test_pred - y_test)**2)}")
 
-    def get_predicted_total_exchange_energy(
+    def get_predicted_exchange_energy(
         self, system: str, model_name: str | None = None
     ) -> float:
         if self.regressor == None:
@@ -69,6 +99,24 @@ class ExxPipeline:
         exx = self.dataset.convert_labels_to_exchange_energy_density(system, y)
         dV = self.dataset.get_dV(system)
         return float(np.sum(exx * dV))
+
+    def get_predicted_ls_formation_exchange_energies(
+        self, model_name: str | None = None
+    ) -> dict[str, float]:
+        """
+        Returns:
+            A dict containing the least squares exchange energies of formation (in Hartrees) for each system
+        """
+        Exx = np.array(
+            [
+                self.get_predicted_exchange_energy(system, model_name)
+                for system in self.systems
+            ]
+        )
+        N = self.coefficient_matrix
+        least_squares_elemental_potentials = np.linalg.pinv(N.T @ N) @ N.T @ Exx
+        delta_Exx = Exx - N @ least_squares_elemental_potentials
+        return {self.systems[i]: delta_Exx[i] for i in range(len(self.systems))}
 
     def get_reaction_coefficients(
         self, reactants: list[str], products: list[str]
@@ -198,11 +246,11 @@ class ExxPipeline:
             reactants, products
         )
         reactant_energies = [
-            self.get_true_total_exchange_energy(system)
+            reactant_coeffs[i] * self.get_true_exchange_energy(system)
             for i, system in enumerate(reactants)
         ]
         product_energies = [
-            self.get_true_total_exchange_energy(system)
+            product_coeffs[i] * self.get_true_exchange_energy(system)
             for i, system in enumerate(products)
         ]
         return sum(product_energies) - sum(reactant_energies)
@@ -214,13 +262,11 @@ class ExxPipeline:
             reactants, products
         )
         reactant_energies = [
-            reactant_coeffs[i]
-            * self.get_predicted_total_exchange_energy(system, model_name)
+            reactant_coeffs[i] * self.get_predicted_exchange_energy(system, model_name)
             for i, system in enumerate(reactants)
         ]
         product_energies = [
-            product_coeffs[i]
-            * self.get_predicted_total_exchange_energy(system, model_name)
+            product_coeffs[i] * self.get_predicted_exchange_energy(system, model_name)
             for i, system in enumerate(products)
         ]
         return sum(product_energies) - sum(reactant_energies)
