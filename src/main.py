@@ -7,34 +7,52 @@ from pipeline.exx_pipeline import ExxPipeline
 np.random.seed(1)
 
 # define a dataset
-dataset = ExxDataset(system_type="molecules") # system_type could be None (all) or any of 'bulks', 'molecules', or 'cubic_bulks'
+dataset = ExxDataset(
+    system_type="molecules",
+    descriptor_data_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/descriptor_data/",
+    exact_exchange_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
+)  # system_type could be None (all) or any of 'bulks', 'molecules', or 'cubic_bulks'
 
 print("Available systems:", dataset.get_available_systems())
 print("Atoms in NH2OH", dataset.get_atoms_in_system("NH2OH"))
 
 # define a regressor
-regressor = KRRRegressor(alpha=0.0001, gamma=0.1)  # best parameters used in Jagriti's Thesis
+regressor = KRRRegressor(
+    alpha=0.0001, gamma=0.1
+)  # best parameters used in Jagriti's Thesis
 
 # create a pipeline instance
 pipeline = ExxPipeline(dataset=dataset, regressor=None)
 
 # Train a model
-pipeline.set_regressor(regressor)  # you can optionally just pass this directly into the pipeline constructor above
-pipeline.train_regressor(sample_size=3000, shuffle_data=True, model_name="example_model.pkl")
+pipeline.set_regressor(
+    regressor
+)  # you can optionally just pass this directly into the pipeline constructor above
+pipeline.train_regressor(
+    sample_size=3000, shuffle_data=True, model_name="example_model.pkl"
+)
 true_exchange_energy = pipeline.get_true_exchange_energy("NH2OH")
-pred_exchange_energy = pipeline.get_predicted_exchange_energy("NH2OH", model_name="example_model.pkl")
+pred_exchange_energy = pipeline.get_predicted_exchange_energy(
+    "NH2OH", model_name="example_model.pkl"
+)
 
 print("True Exchange Energy:", true_exchange_energy, "Ha")
 print("Predicted Exchange Energy:", pred_exchange_energy, "Ha")
 print("Error:", true_exchange_energy - pred_exchange_energy, "Ha")
 
 # Calculate formation energies from a reference set
-true_formation_exchange_energy = pipeline.get_true_reaction_exchange_energy(reactants=["NH3", "NO", "H2O"], products=["NH2OH"])
-predicted_formation_exchange_energy = pipeline.get_predicted_reaction_exchange_energy(reactants=["NH3", "NO", "H2O"], products=["NH2OH"], model_name="example_model.pkl")
+true_formation_exchange_energy = pipeline.get_true_reaction_exchange_energy(
+    reactants=["NH3", "NO", "H2O"], products=["NH2OH"]
+)
+predicted_formation_exchange_energy = pipeline.get_predicted_reaction_exchange_energy(
+    reactants=["NH3", "NO", "H2O"], products=["NH2OH"], model_name="example_model.pkl"
+)
 
 print("True Exchange Energy:", true_formation_exchange_energy, "Ha")
 print("Predicted Exchange Energy:", predicted_formation_exchange_energy, "Ha")
-print("Error:", true_formation_exchange_energy - predicted_formation_exchange_energy, "Ha")
+print(
+    "Error:", true_formation_exchange_energy - predicted_formation_exchange_energy, "Ha"
+)
 
 # Calculate formation energies using least squares
 print(pipeline.get_true_ls_formation_exchange_energies()['NH2OH'])

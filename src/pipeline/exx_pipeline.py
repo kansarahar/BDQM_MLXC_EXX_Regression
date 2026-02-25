@@ -48,7 +48,7 @@ class ExxPipeline:
         """
         exx = self.dataset.get_exchange_energy_density(system)
         dV = self.dataset.get_dV(system)
-        return float(np.sum(exx * dV))
+        return float(np.sum(exx))
 
     def get_true_ls_formation_exchange_energies(self) -> dict[str, float]:
         """
@@ -98,7 +98,7 @@ class ExxPipeline:
 
         exx = self.dataset.convert_labels_to_exchange_energy_density(system, y)
         dV = self.dataset.get_dV(system)
-        return float(np.sum(exx * dV))
+        return float(np.sum(exx))
 
     def get_predicted_ls_formation_exchange_energies(
         self, model_name: str | None = None
