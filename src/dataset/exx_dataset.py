@@ -187,7 +187,7 @@ class ExxDataset(BaseDataset):
         for st in self.system_types:
             exchange_data_file_names = list(
                 filter(
-                    lambda s: s.endswith(".pkl"),
+                    lambda s: s.endswith(".pkl") and not s == ('ex_overall.pkl'),
                     os.listdir(
                         os.path.join(
                             self.exact_exchange_dir_path,
@@ -282,7 +282,7 @@ class ExxDataset(BaseDataset):
         x_file_path, exLDA_file_path, exx_file_path = self._get_file_paths(
             "all", system_type, system
         )
-        exx_data = self._get_numpy_data_from_file_path(exx_file_path)
+        exx_data = self._get_numpy_data_from_file_path(exx_file_path) * 4
         return exx_data
 
     def _get_subsampled_data(

@@ -3,6 +3,9 @@ channels:
   - defaults
 dependencies:
   - python=3.11
+  - ase
+  - pandas
+  - sparc-x-api
   - matplotlib
   - pydantic
   - scipy
