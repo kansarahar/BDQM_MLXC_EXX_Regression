@@ -9,8 +9,8 @@ np.random.seed(1)
 # define a dataset
 dataset = ExxDataset(
     system_type="molecules",
-    descriptor_data_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/descriptor_data/",
-    exact_exchange_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
+    # descriptor_data_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/descriptor_data/",
+    # exact_exchange_dir_path="/storage/cedar/cedar0/cedarp-amedford6-0/ssahoo41/exact_exchange_work/test_2_dir/subsampling/subsampled_folder_ex",
 )  # system_type could be None (all) or any of 'bulks', 'molecules', or 'cubic_bulks'
 
 print("Available systems:", dataset.get_available_systems())
